@@ -1,0 +1,97 @@
+{
+  "Comment": "Step Function to execute Redshift SP, move S3 file, and notify via SNS",
+  "StartAt": "Execute Redshift Stored Procedure",
+  "States": {
+    "Execute Redshift Stored Procedure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:redshiftdata:executeStatement",
+      "Parameters": {
+        "WorkgroupName": "pkk-rs-wg",
+        "Database": "dev",
+        "SecretArn": "arn:aws:secretsmanager:us-east-2:178795994454:secret:my_redshift_secrets-lIWc8H",
+        "Sql": "CALL dev.public.sp_process_coffee_sales();"
+      },
+      "ResultSelector": {
+        "Id.$": "$.Id"
+      },
+      "ResultPath": "$",
+      "Next": "Wait Before Describe Statement"
+    },
+    "Wait Before Describe Statement": {
+      "Type": "Wait",
+      "Seconds": 5,
+      "Next": "Pass"
+    },
+    "Pass": {
+      "Type": "Pass",
+      "Next": "DescribeStatement"
+    },
+    "DescribeStatement": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:redshiftdata:describeStatement",
+      "Parameters": {
+        "Id.$": "$.Id"
+      },
+      "ResultPath": "$.describeResult",
+      "Next": "Check Statement Status"
+    },
+    "Check Statement Status": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.describeResult.Status",
+          "StringEquals": "FINISHED",
+          "Next": "Move Raw File to Archive"
+        },
+        {
+          "Variable": "$.describeResult.Status",
+          "StringEquals": "FAILED",
+          "Next": "SNS Publish @ Failed"
+        }
+      ],
+      "Default": "Wait Before Describe Statement"
+    },
+    "Move Raw File to Archive": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:copyObject",
+      "Parameters": {
+        "Bucket": "assurebuckets32pkkuppili",
+        "CopySource": "assurebuckets32pkkuppili/input/",
+        "Key": "archive/Coffee_sales.csv"
+      },
+      "Next": "Delete Raw File"
+    },
+    "Delete Raw File": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:s3:deleteObject",
+      "Parameters": {
+        "Bucket": "assurebuckets32pkkuppili",
+        "Key": "input/Coffee_sales.csv"
+      },
+      "Next": "SNS Publish @ Success"
+    },
+    "SNS Publish @ Success": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-2:178795994454:demo_topic",
+        "Message": {
+          "Result": "Data Loaded Successfully into Redshift and raw S3 file was deleted after moving to archive folder"
+        }
+      },
+      "End": true
+    },
+    "SNS Publish @ Failed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-2:178795994454:demo_topic2",
+        "Message": {
+          "Message Id.$": "$.MessageId",
+          "Emergency_Contact": "ajhdsjdgw@email.in"
+        }
+      },
+      "End": true
+    }
+  }
+}
