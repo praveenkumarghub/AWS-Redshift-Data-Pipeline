@@ -36,6 +36,7 @@ This project demonstrates a **fully automated, end-to-end data pipeline** using 
 ---
 
 ## 🏗️ Architecture Diagram
+<img width="650" height="459" alt="image" src="https://github.com/user-attachments/assets/46542cd0-492f-4d93-a644-2ccd346728ad" />
 
 The architecture involves:
 - **Amazon S3** (raw + archive buckets)
